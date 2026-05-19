@@ -45,7 +45,6 @@
   .verdict.idle{background:transparent;border-color:var(--line);color:var(--ink-soft);font-weight:500}
   .verdict .count{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink-soft)}
 
-  /* collapsible boxes */
   .rbox{border:1px solid var(--line);border-radius:4px;margin-bottom:14px;overflow:hidden;background:var(--card)}
   .rbox-h{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;border:0;border-radius:0;
     background:var(--paper);color:var(--ink);cursor:pointer;font-weight:700;letter-spacing:.02em;text-align:left;}
@@ -65,7 +64,6 @@
   .rbox.open .rbox-body{display:block}
   .rbox-empty{padding:16px;color:var(--ink-soft);font-size:12.5px}
 
-  /* per-card collapsible row */
   .crow{border-top:1px solid var(--line)}
   .crow:first-child{border-top:0}
   .crow-h{width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;border:0;border-radius:0;
@@ -100,8 +98,8 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="kicker">Scaler · Content Writing team</div>
-    <h1>Cue Card Validator Beta</h1>
+    <div class="kicker">Scaler · Content Team Companion</div>
+    <h1>Cue Card Validator (Beta)</h1>
     <p class="sub">Paste a single card or a whole multi-card playlist. The validator splits the file into cards by their <code>---</code> metadata blocks and checks each one. Results are grouped into an <b>Errors</b> box and a <b>Warnings</b> box — open either to read every issue, card by card.</p>
   </header>
 
@@ -113,8 +111,8 @@
         <button class="primary" onclick="run()">Validate</button>
         <button class="ghost" onclick="load('cue')">Cue example</button>
         <button class="ghost" onclick="load('quiz')">Quiz example</button>
-        <button class="ghost" onclick="load('trail')">Quiz trailing-content bug</button>
-        <button class="ghost" onclick="load('bad')">Broken metadata</button>
+        <button class="ghost" onclick="load('trail')">Trailing-content bug</button>
+        <button class="ghost" onclick="load('stray')">Stray --- / emoji title</button>
         <button class="ghost" onclick="document.getElementById('src').value='';run()">Clear</button>
       </div>
     </div>
@@ -132,16 +130,16 @@
     <summary>Rules enforced by this validator</summary>
     <ul class="rules">
       <li>The file is split into cards at each <code>---</code> metadata block; <b>every card is validated</b>.</li>
-      <li>Each card must <b>open with <code>---</code></b> and close metadata with a matching <code>---</code>.</li>
+      <li><b><code>---</code> is only allowed as a card's opening / closing metadata delimiter.</b> Any standalone <code>---</code> elsewhere is an error, and every opening <code>---</code> must have a matching closing <code>---</code>.</li>
       <li>Metadata must contain <b>exactly 4 keys</b>: <code>title</code>, <code>description</code>, <code>duration</code>, <code>card_type</code> — no missing, duplicate, or unknown keys.</li>
       <li>Each metadata line is <code>key: value</code> — <b>no space before <code>:</code></b>, a space after it; values stay on one line.</li>
-      <li><b>title</b> — required, non-empty, no <code>:</code>, no <code>---</code>, no special characters or symbols (not even a full stop). Letters, digits, spaces and single hyphens only.</li>
+      <li><b>title</b> — required, non-empty, no <code>:</code>, no <code>---</code>, <b>no emojis</b>. Allowed: letters, digits, spaces, hyphens, and <code>, ? ' "</code>. Nothing else (no full stop).</li>
       <li><b>description</b> — key required; value may be empty.</li>
       <li><b>duration</b> — required, positive whole number of seconds.</li>
       <li><b>card_type</b> — exactly <code>cue_card</code> or <code>quiz_card</code>.</li>
       <li><b>Cue card</b> — body content present, with at least one heading.</li>
       <li><b>Quiz card</b> — has <code># Question</code> (with content) and <code># Choices</code>; at least 2 choices; exactly one correct; correct mark is lowercase <code>[x]</code> (capital <code>[X]</code> is an error).</li>
-      <li><b>Quiz card ends at its choices.</b> Any content after the last choice — before the next card's <code>---</code> — is dropped on ingestion and invisible to the instructor → <b>error</b>.</li>
+      <li><b>Quiz card ends at its choices.</b> Any content after the last choice — before the next card's <code>---</code> — is dropped on ingestion → <b>error</b>.</li>
       <li><b>Code blocks</b> — should use the <code>```lang=</code> fence form (advisory warning).</li>
     </ul>
   </details>
@@ -213,20 +211,27 @@ Your team has a specific format for ADRs. Which approach is most effective?
 > "When you need output to match a specific template, showing beats telling."
 
 ## Chain-of-Thought Prompting and Output Formatting`,
-  bad:`---
-title: Problem 1: Optimized Solution.
+  stray:`---
+title: Sorting Algorithms 🚀, a quick recap.
 description: demo
-duration : five
-card_type: flash_card
-extra_key: oops
+duration: 200
+card_type: cue_card
 ---
 
-some content with no heading`
+# Sorting Algorithms
+
+Quick recap of what we covered
+
+---
+
+Some extra notes added with a horizontal rule above — this --- is not allowed.`
 };
 function load(k){document.getElementById('src').value=SAMPLES[k];run();}
 
 const KEYS=['title','description','duration','card_type'];
 const KNOWN=new Set(KEYS);
+const EMOJI=/\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}]/gu;
+const TITLE_OK=/[A-Za-z0-9 ,?'"\u2018\u2019\u201C\u201D:\-]/g;
 
 function splitCards(lines){
   const isDelim=s=>s.trim()==='---';
@@ -281,12 +286,21 @@ function validateCard(lines,c){
     title=seen.title.value;const ln=seen.title.ln;
     if(title===''){E(ln,'title is empty.','Provide a descriptive title.');}
     else{
-      if(title.includes(':'))E(ln,'title contains ":".','Remove the colon — not allowed in titles.');
-      if(/-{3,}|(?:-\s){2,}-/.test(title))E(ln,'title contains "---".','Remove the triple dashes.');
-      const bad=title.replace(/[A-Za-z0-9 \-]/g,'');
+      const em=title.match(EMOJI);
+      if(em&&em.length){
+        const u=[...new Set(em)].join(' ');
+        E(ln,'title contains emoji: '+u,'Emojis are strictly not allowed in titles. Remove them.');
+      }
+      if(title.includes(':'))
+        E(ln,'title contains ":".','Remove the colon — not allowed in titles.');
+      if(/-{3,}|(?:-\s){2,}-/.test(title))
+        E(ln,'title contains "---".','Remove the triple dashes — --- is only for metadata delimiters.');
+      const cleaned=title.replace(EMOJI,'').replace(/[\uFE0F\u200D\u20E3]/g,'');
+      const bad=cleaned.replace(TITLE_OK,'');
       if(bad.length){
         const list=[...new Set(bad.split(''))].map(x=>x===' '?'space':x).join(' ');
-        E(ln,'title has special characters / symbols: '+list,'Use only letters, digits, spaces and single hyphens — not even a full stop.');
+        E(ln,'title has disallowed characters: '+list,
+          'Allowed: letters, digits, spaces, hyphens and , ? \' "  — nothing else (no full stop, no emojis).');
       }
     }
   }
@@ -356,7 +370,7 @@ function validateCard(lines,c){
         for(let i=lastChoice+1;i<body.length;i++){
           if(body[i].trim()!==''){
             E(G(i),'Content after the quiz choices.',
-              'A quiz card ends at its choices. Anything here — until the next card\'s "---" — is dropped on ingestion and is NOT visible to the instructor. Move this into its own cue card (its own --- metadata block) or remove it.');
+              'A quiz card ends at its choices. Anything here — until the next card\'s "---" — is dropped on ingestion and is NOT visible to the instructor. Move this into its own cue card or remove it.');
             break;
           }
         }
@@ -380,48 +394,53 @@ function validateCard(lines,c){
   return{errors,warnings,cardType,title};
 }
 
-// ---- collapse / expand handlers ----
-function toggleBox(btn){ btn.parentElement.classList.toggle('open'); }
-function toggleCrow(btn){ btn.parentElement.classList.toggle('open'); }
-function setAll(btn,state){
-  const box=btn.closest('.rbox');
-  box.querySelectorAll('.crow').forEach(r=>r.classList.toggle('open',state));
+// stray "---" classification
+function classifyStray(lines,i){
+  let known=0,closed=false;
+  for(let j=i+1;j<lines.length && (j-i)<=30;j++){
+    if(lines[j].trim()==='---'){closed=true;break;}
+    const t=lines[j].trim();
+    if(t!==''){const ci=lines[j].indexOf(':');if(ci>-1&&KNOWN.has(lines[j].slice(0,ci).trim()))known++;}
+  }
+  if(known>=2&&!closed)
+    return['Metadata block opened with "---" but never closed.','Every opening --- needs a matching closing --- after the 4 attributes.'];
+  return['Stray "---" outside a card metadata block.','--- may only be a card\'s opening or closing metadata delimiter. Remove it, or wrap the surrounding content in its own card.'];
 }
 
+function toggleBox(btn){ btn.parentElement.classList.toggle('open'); }
+function toggleCrow(btn){ btn.parentElement.classList.toggle('open'); }
+function setAll(btn,state){ btn.closest('.rbox').querySelectorAll('.crow').forEach(r=>r.classList.toggle('open',state)); }
+
 function issuesHTML(items,cls,tag){
-  return items.sort((a,b)=>a.line-b.line).map(x=>
+  return items.slice().sort((a,b)=>a.line-b.line).map(x=>
     `<div class="issue ${cls}"><span class="tag">${tag}</span><span class="ln">L${x.line}</span> &nbsp;${esc(x.msg)}${x.hint?`<span class="hint">↳ ${esc(x.hint)}</span>`:''}</div>`
   ).join('');
 }
 
-function boxHTML(kind,results,total){
+function boxHTML(kind,groups,total,openFlag){
   const isErr=kind==='err';
   const label=isErr?'Errors':'Warnings';
   const cls=isErr?'err':'warn';
   const issueCls=isErr?'e':'w';
   const tag=isErr?'ERROR':'WARN';
   let rows='';
-  results.forEach((r,k)=>{
-    const list=isErr?r.errors:r.warnings;
-    if(!list.length)return;
-    const ty=`<span class="chip ty">${r.cardType||'unknown'}</span>`;
-    const ttl=esc(r.title||'(no title)');
-    const loc=`L${r.open+1}–L${r.bodyEnd}`;
+  groups.forEach(g=>{
+    if(!g.items.length)return;
+    const ty=g.type?`<span class="chip ty">${g.type}</span>`:'';
+    const loc=g.loc?`<span class="loc">${g.loc}</span>`:'<span class="loc"></span>';
     rows+=`<div class="crow open">
       <button class="crow-h" onclick="toggleCrow(this)">
-        <span class="caret">▸</span><span class="idx">Card ${k+1}</span>${ty}
-        <span class="ctitle">${ttl}</span>
-        <span class="n">${list.length}</span><span class="loc">${loc}</span>
+        <span class="caret">▸</span><span class="idx">${esc(g.name)}</span>${ty}
+        <span class="ctitle">${esc(g.title||'')}</span>
+        <span class="n">${g.items.length}</span>${loc}
       </button>
-      <div class="crow-body">${issuesHTML(list.slice(),issueCls,tag)}</div>
+      <div class="crow-body">${issuesHTML(g.items,issueCls,tag)}</div>
     </div>`;
   });
   if(!rows) rows=`<div class="rbox-empty">No ${label.toLowerCase()} found.</div>`;
-  const open = (isErr && total>0) || (!isErr && total>0 && arguments[3]) ? ' open':'';
-  return `<div class="rbox ${cls}${open}">
+  return `<div class="rbox ${cls}${openFlag?' open':''}">
     <button class="rbox-h" onclick="toggleBox(this)">
-      <span class="caret">▸</span><span class="ttl">${label}</span>
-      <span class="pill">${total}</span>
+      <span class="caret">▸</span><span class="ttl">${label}</span><span class="pill">${total}</span>
     </button>
     <div class="rbox-tools">
       <button onclick="event.stopPropagation();setAll(this,true)">Expand all</button>
@@ -443,19 +462,34 @@ function run(){
   }
 
   const cards=splitCards(lines);
-  if(cards.length===0){
-    v.className='verdict fail';
-    v.innerHTML='<span class="badge">✗ INVALID</span><span>No cue/quiz card found</span>';
-    box.innerHTML='<div class="rbox err open"><div class="rbox-body"><div class="rbox-empty">No metadata block detected. Each card must start with <code>---</code>, list its attributes, then close with <code>---</code>.</div></div></div>';
-    ctEl.textContent='0 cards';return;
+  const results=cards.map(c=>{const r=validateCard(lines,c);r.open=c.open;r.bodyEnd=c.bodyEnd;return r;});
+
+  // stray "---" detection
+  const delim=new Set();
+  cards.forEach(c=>{delim.add(c.open);delim.add(c.close);});
+  const docErrors=[];
+  for(let i=0;i<lines.length;i++){
+    if(lines[i].trim()==='---' && !delim.has(i)){
+      const [msg,hint]=classifyStray(lines,i);
+      const ci=cards.findIndex(c=>i>=c.open && i<c.bodyEnd);
+      if(ci>-1) results[ci].errors.push({line:i+1,msg,hint});
+      else docErrors.push({line:i+1,msg,hint});
+    }
   }
 
-  const results=cards.map((c,k)=>{
-    const r=validateCard(lines,c);
-    r.open=c.open;r.bodyEnd=c.bodyEnd;return r;
-  });
-  const totalE=results.reduce((s,r)=>s+r.errors.length,0);
+  if(cards.length===0 && docErrors.length===0){
+    docErrors.push({line:1,msg:'No card metadata block detected.',hint:'Each card must start with --- , list its attributes, then close with --- .'});
+  }
+
+  const totalE=results.reduce((s,r)=>s+r.errors.length,0)+docErrors.length;
   const totalW=results.reduce((s,r)=>s+r.warnings.length,0);
+
+  const errGroups=[];
+  if(docErrors.length) errGroups.push({name:'Document',type:null,title:'issues outside any card',loc:'',items:docErrors});
+  results.forEach((r,k)=>{ if(r.errors.length) errGroups.push({name:'Card '+(k+1),type:r.cardType||'unknown',title:r.title||'(no title)',loc:'L'+(r.open+1)+'–L'+r.bodyEnd,items:r.errors}); });
+
+  const warnGroups=[];
+  results.forEach((r,k)=>{ if(r.warnings.length) warnGroups.push({name:'Card '+(k+1),type:r.cardType||'unknown',title:r.title||'(no title)',loc:'L'+(r.open+1)+'–L'+r.bodyEnd,items:r.warnings}); });
 
   ctEl.textContent=cards.length+(cards.length===1?' card':' cards');
   if(totalE===0){
@@ -466,10 +500,8 @@ function run(){
     v.innerHTML='<span class="badge">✗ INVALID</span><span>Not in the expected format</span><span class="count">'+totalE+' error'+(totalE===1?'':'s')+' · '+totalW+' warning'+(totalW===1?'':'s')+'</span>';
   }
 
-  // Errors box open if any errors; Warnings box open only if no errors but warnings exist
-  const errBox=boxHTML('err',results,totalE);
-  const warnBox=boxHTML('warn',results,totalW, totalE===0);
-  box.innerHTML=errBox+warnBox;
+  box.innerHTML = boxHTML('err',errGroups,totalE, totalE>0)
+                + boxHTML('warn',warnGroups,totalW, totalE===0 && totalW>0);
 }
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 document.getElementById('src').addEventListener('input',()=>{
