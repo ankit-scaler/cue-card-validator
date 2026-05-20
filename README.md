@@ -22,9 +22,13 @@ Open `index.html` in any browser — no build step, no dependencies, no network
 
 ## What it checks
 
-- Metadata block: exactly `title`, `description`, `duration`, `card_type`;
-  `key: value` form; single-line values.
-- `title`: no `:`, no `---`, no special characters (not even `.`).
+- `---` is only allowed as a card's opening/closing metadata delimiter; any
+  stray `---` is an error, and every opening `---` must have a closing `---`.
+- Metadata: `title`, `duration`, `card_type` are **mandatory** (errors if
+  missing). `description` is optional (warning if missing).
+  All values follow `key: value` form on a single line.
+- `title`: no `:`, no `---`, no emojis; allows letters, digits, spaces,
+  hyphens, and `. , ? ' " & ( ) [ ] + * /`.
 - `duration`: positive integer (seconds).
 - `card_type`: exactly `cue_card` or `quiz_card`.
 - Cue card: has body content with a heading.
