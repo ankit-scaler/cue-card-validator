@@ -98,8 +98,8 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="kicker">Scaler · Content Team Companion</div>
-    <h1>Cue Card Validator (Beta)</h1>
+    <div class="kicker">Scaler · Content Writing Team</div>
+    <h1>Cue Card Validator V 2.0 </h1>
     <p class="sub">Paste a single card or a whole multi-card playlist. The validator splits the file into cards by their <code>---</code> metadata blocks and checks each one. Results are grouped into an <b>Errors</b> box and a <b>Warnings</b> box — open either to read every issue, card by card.</p>
   </header>
 
@@ -131,10 +131,10 @@
     <ul class="rules">
       <li>The file is split into cards at each <code>---</code> metadata block; <b>every card is validated</b>.</li>
       <li><b><code>---</code> is only allowed as a card's opening / closing metadata delimiter.</b> Any standalone <code>---</code> elsewhere is an error, and every opening <code>---</code> must have a matching closing <code>---</code>.</li>
-      <li>Metadata must contain <b>exactly 4 keys</b>: <code>title</code>, <code>description</code>, <code>duration</code>, <code>card_type</code> — no missing, duplicate, or unknown keys.</li>
+      <li>Metadata keys: <b>mandatory</b> <code>title</code>, <code>duration</code>, <code>card_type</code> (errors if missing); <code>description</code> is optional (warning if missing). No duplicate or unknown keys.</li>
       <li>Each metadata line is <code>key: value</code> — <b>no space before <code>:</code></b>, a space after it; values stay on one line.</li>
-      <li><b>title</b> — required, non-empty, no <code>:</code>, no <code>---</code>, <b>no emojis</b>. Allowed: letters, digits, spaces, hyphens, and <code>, ? ' "</code>. Nothing else (no full stop).</li>
-      <li><b>description</b> — key required; value may be empty.</li>
+      <li><b>title</b> — required, non-empty, no <code>:</code>, no <code>---</code>, <b>no emojis</b>. Allowed: letters, digits, spaces, hyphens, and <code>, ? ' " &amp; ( ) [ ]</code>. Nothing else (no full stop).</li>
+      <li><b>description</b> — optional; if present, value may be empty.</li>
       <li><b>duration</b> — required, positive whole number of seconds.</li>
       <li><b>card_type</b> — exactly <code>cue_card</code> or <code>quiz_card</code>.</li>
       <li><b>Cue card</b> — body content present, with at least one heading.</li>
@@ -231,8 +231,7 @@ function load(k){document.getElementById('src').value=SAMPLES[k];run();}
 const KEYS=['title','description','duration','card_type'];
 const KNOWN=new Set(KEYS);
 const EMOJI=/\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}]/gu;
-const TITLE_OK=/[A-Za-z0-9 ,?'"\u2018\u2019\u201C\u201D:\-]/g;
-
+const TITLE_OK=/[A-Za-z0-9 .,?'"&()\[\]\u2018\u2019\u201C\u201D:\-]/g;
 function splitCards(lines){
   const isDelim=s=>s.trim()==='---';
   const cards=[];
@@ -280,7 +279,13 @@ function validateCard(lines,c){
     if(seen[key]){E(ln,'Duplicate metadata key "'+key+'".','Each attribute may appear only once.');continue;}
     seen[key]={value,ln};
   }
-  KEYS.forEach(k=>{if(!seen[k])E(c.close+1,'Missing required metadata key "'+k+'".','All 4 attributes must be present.');});
+  KEYS.forEach(k=>{
+    if(seen[k])return;
+    if(k==='description')
+      W(c.close+1,'description key is missing.','Optional — the key is conventionally included even with an empty value.');
+    else
+      E(c.close+1,'Missing required metadata key "'+k+'".','title, duration and card_type are mandatory.');
+  });
 
   if(seen.title){
     title=seen.title.value;const ln=seen.title.ln;
@@ -300,7 +305,7 @@ function validateCard(lines,c){
       if(bad.length){
         const list=[...new Set(bad.split(''))].map(x=>x===' '?'space':x).join(' ');
         E(ln,'title has disallowed characters: '+list,
-          'Allowed: letters, digits, spaces, hyphens and , ? \' "  — nothing else (no full stop, no emojis).');
+          'Allowed: letters, digits, spaces, hyphens, and , ? \' " & ( ) [ ]  — nothing else (no full stop, no emojis).');
       }
     }
   }
